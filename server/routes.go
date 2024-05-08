@@ -512,8 +512,8 @@ func (s *Server) PushModelHandler(c *gin.Context) {
 }
 
 func (s *Server) CreateModelHandler(c *gin.Context) {
-	var req api.CreateRequest
-	if err := c.ShouldBindJSON(&req); errors.Is(err, io.EOF) {
+	var r api.CreateRequest
+	if err := c.ShouldBindJSON(&r); errors.Is(err, io.EOF) {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "missing request body"})
 		return
 	} else if err != nil {
@@ -521,30 +521,30 @@ func (s *Server) CreateModelHandler(c *gin.Context) {
 		return
 	}
 
-	name := model.ParseName(cmp.Or(req.Model, req.Name))
+	name := model.ParseName(cmp.Or(r.Model, r.Name))
 	if !name.IsValid() {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "invalid model name"})
 		return
 	}
 
-	if req.Path == "" && req.Modelfile == "" {
+	if r.Path == "" && r.Modelfile == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": "path or modelfile are required"})
 		return
 	}
 
-	var r io.Reader = strings.NewReader(req.Modelfile)
-	if req.Path != "" && req.Modelfile == "" {
-		f, err := os.Open(req.Path)
+	var rr io.Reader = strings.NewReader(r.Modelfile)
+	if r.Path != "" && r.Modelfile == "" {
+		ff, err := os.Open(r.Path)
 		if err != nil {
 			c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("error reading modelfile: %s", err)})
 			return
 		}
-		defer f.Close()
+		defer ff.Close()
 
-		r = f
+		rr = ff
 	}
 
-	modelfile, err := model.ParseFile(r)
+	f, err := model.ParseFile(rr)
 	if err != nil {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -560,12 +560,12 @@ func (s *Server) CreateModelHandler(c *gin.Context) {
 		ctx, cancel := context.WithCancel(c.Request.Context())
 		defer cancel()
 
-		if err := CreateModel(ctx, name.String(), filepath.Dir(req.Path), strings.ToUpper(req.Quantization), modelfile, fn); err != nil {
+		if err := CreateModel(ctx, name, filepath.Dir(r.Path), strings.ToUpper(r.Quantization), f, fn); err != nil {
 			ch <- gin.H{"error": err.Error()}
 		}
 	}()
 
-	if req.Stream != nil && !*req.Stream {
+	if r.Stream != nil && !*r.Stream {
 		waitForStream(c, ch)
 		return
 	}
@@ -596,6 +596,11 @@ func (s *Server) DeleteModelHandler(c *gin.Context) {
 	}
 
 	if err := m.Remove(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	if err := m.RemoveLayers(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}

@@ -61,7 +61,7 @@ func Test_Routes(t *testing.T) {
 		fn := func(resp api.ProgressResponse) {
 			t.Logf("Status: %s", resp.Status)
 		}
-		err = CreateModel(context.TODO(), name, "", "", modelfile, fn)
+		err = CreateModel(context.TODO(), model.ParseName(name), "", "", modelfile, fn)
 		assert.Nil(t, err)
 	}
 
